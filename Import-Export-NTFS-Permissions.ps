@@ -1,0 +1,41 @@
+$SourcePath = "F:\UPD-FSLogix"
+$BackupPath = "C:\install\fslogic-recurse.xml"
+
+$Items = @(Get-Item -LiteralPath $SourcePath -Force) +
+         @(Get-ChildItem -LiteralPath $SourcePath -Recurse -Force)
+
+$AclBackup = foreach ($Item in $Items) {
+    try {
+        $Acl = Get-Acl -LiteralPath $Item.FullName
+        [PSCustomObject]@{
+            Path = $Item.FullName
+            Sddl = $Acl.Sddl
+        }
+    }
+    catch {
+        Write-Warning "Не вдалося прочитати ACL: $($Item.FullName) - $($_.Exception.Message)"
+    }
+}
+
+$AclBackup | Export-Clixml -LiteralPath $BackupPath
+Write-Host "ACL експортовано: $BackupPath ($($AclBackup.Count) об'єктів)" -ForegroundColor Green
+
+
+#####################################################################################################
+
+
+$AclBackup = Import-Clixml -LiteralPath "C:\install\fslogic-recurse.xml"
+
+foreach ($Item in $AclBackup) {
+    try {
+        $Acl = Get-Acl -LiteralPath $Item.Path
+        $Acl.SetSecurityDescriptorSddlForm($Item.Sddl)
+        Set-Acl -LiteralPath $Item.Path -AclObject $Acl -ErrorAction Stop
+        Write-Host "[OK] $($Item.Path)" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "[ERROR] $($Item.Path): $_" -ForegroundColor Red
+    }
+}
+
+Write-Host "Відновлення ACL завершено." -ForegroundColor Cyan
